@@ -513,73 +513,161 @@ function cpuPickMove(){
   return cpuHard(cols);
 }
 
-// Easy: random column, rarely rotates
+// Easy: random + 30% chance to block immediate player win
 function cpuEasy(cols){
-  if(rot[2]>0 && Math.random()<0.08) return {type:'rotate'};
-  return {type:'drop', col: cols[Math.floor(Math.random()*cols.length)]};
+  // 30% chance to notice and block a player win
+  if(Math.random()<0.30){
+    for(const c of cols){
+      const r=landRow(c); board[r][c]=1;
+      if(checkWin().winner===1){board[r][c]=0; return {type:'drop',col:c};}
+      board[r][c]=0;
+    }
+  }
+  // Very rarely rotate
+  if(rot[2]>0 && Math.random()<0.06) return {type:'rotate'};
+  return {type:'drop', col:cols[Math.floor(Math.random()*cols.length)]};
 }
 
-// Normal: win if can, block if can, else random
+// Normal: win > block > fork attack > fork defense > center priority
 function cpuNormal(cols){
-  // Check for winning move
+  // 1. Win immediately
   for(const c of cols){
-    const r=landRow(c);
-    board[r][c]=2;
+    const r=landRow(c); board[r][c]=2;
     if(checkWin().winner===2){board[r][c]=0; return {type:'drop',col:c};}
     board[r][c]=0;
   }
-  // Block player win
+  // 2. Block player win
   for(const c of cols){
-    const r=landRow(c);
-    board[r][c]=1;
+    const r=landRow(c); board[r][c]=1;
     if(checkWin().winner===1){board[r][c]=0; return {type:'drop',col:c};}
     board[r][c]=0;
   }
-  // Consider rotate if it helps
-  if(rot[2]>0 && Math.random()<0.18){
-    const score = evalRotate(2);
-    if(score>0) return {type:'rotate'};
+  // 3. Fork attack: find a move that creates 2+ winning threats
+  const forkAtk=findFork(cols,2);
+  if(forkAtk!==null) return {type:'drop',col:forkAtk};
+  // 4. Block player fork
+  const forkDef=findFork(cols,1);
+  if(forkDef!==null) return {type:'drop',col:forkDef};
+  // 5. Compare rotate vs best drop score — always evaluated, no random gate
+  let bestDrop=-Infinity, bestDropCol=sorted[0]||(cols[0]);
+  const order=[1,2,0,3];
+  const sorted=[...cols].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  for(const c of sorted){
+    const r=landRow(c); board[r][c]=2;
+    const s=scoreBoard(2)-scoreBoard(1)*0.9;
+    board[r][c]=0;
+    if(s>bestDrop){bestDrop=s; bestDropCol=c;}
   }
-  return {type:'drop', col: cols[Math.floor(Math.random()*cols.length)]};
+  if(rot[2]>0){
+    const rotScore=evalRotate(2);
+    // Use rotation if it's clearly better than any drop
+    if(rotScore>bestDrop) return {type:'rotate'};
+  }
+  return {type:'drop',col:bestDropCol};
 }
 
-// Hard: minimax-like with rotation consideration
+// Return a column for 'player' that creates >= 2 winning threats, else null
+function findFork(cols, player){
+  for(const c of cols){
+    const r=landRow(c); if(r<0) continue;
+    board[r][c]=player;
+    if(checkWin().winner===player){board[r][c]=0; continue;} // already a win, handled above
+    let threats=0;
+    const next=[0,1,2,3].filter(cc=>landRow(cc)>=0);
+    for(const cc of next){
+      const rr=landRow(cc); board[rr][cc]=player;
+      if(checkWin().winner===player) threats++;
+      board[rr][cc]=0;
+    }
+    board[r][c]=0;
+    if(threats>=2) return c;
+  }
+  return null;
+}
+
+// Hard: minimax + alpha-beta pruning, rotation included in the search tree
 function cpuHard(cols){
   // Win immediately
   for(const c of cols){
-    const r=landRow(c);
-    board[r][c]=2;
+    const r=landRow(c); board[r][c]=2;
     if(checkWin().winner===2){board[r][c]=0; return {type:'drop',col:c};}
     board[r][c]=0;
   }
   // Block player win
   for(const c of cols){
-    const r=landRow(c);
-    board[r][c]=1;
+    const r=landRow(c); board[r][c]=1;
     if(checkWin().winner===1){board[r][c]=0; return {type:'drop',col:c};}
     board[r][c]=0;
   }
-  // Consider rotation if beneficial
-  if(rot[2]>0){
-    const rotScore = evalRotate(2);
-    const bestDropScore = Math.max(...cols.map(c=>{
-      const r=landRow(c);
-      board[r][c]=2;
-      const s=scoreBoard(2);
-      board[r][c]=0; return s;
-    }));
-    if(rotScore > bestDropScore + 0.5) return {type:'rotate'};
-  }
-  // Pick best scoring column
-  let best=-Infinity, bestCol=cols[0];
+  let bestScore=-Infinity, bestCol=cols[0], useRotate=false;
+  // Evaluate each drop
   for(const c of shuffle([...cols])){
-    const r=landRow(c);
-    board[r][c]=2;
-    const s = scoreBoard(2) - scoreBoard(1)*0.9;
+    const r=landRow(c); board[r][c]=2;
+    const s=minimaxAB(5,-Infinity,Infinity,false,rot[1],rot[2]);
     board[r][c]=0;
-    if(s>best){best=s; bestCol=c;}
+    if(s>bestScore){bestScore=s; bestCol=c; useRotate=false;}
   }
-  return {type:'drop', col:bestCol};
+  // Evaluate rotation as a first move (rotation count already decremented in subtree)
+  if(rot[2]>0){
+    const saved=board.map(row=>[...row]);
+    applyRotation();
+    const rotScore=minimaxAB(5,-Infinity,Infinity,false,rot[1],rot[2]-1);
+    board=saved;
+    if(rotScore>bestScore){bestScore=rotScore; useRotate=true;}
+  }
+  return useRotate ? {type:'rotate'} : {type:'drop',col:bestCol};
+}
+
+// Minimax with alpha-beta pruning.
+// r1/r2 = remaining rotations for player/CPU in this subtree.
+// Rotation is a valid move at every node alongside dropping.
+function minimaxAB(depth,alpha,beta,isMax,r1,r2){
+  const {winner}=checkWin();
+  if(winner===2) return 1000+depth;
+  if(winner===1) return -(1000+depth);
+  if(isFull()) return 0;
+  if(depth===0) return scoreBoard(2)-scoreBoard(1)*1.1;
+  const avail=[0,1,2,3].filter(c=>landRow(c)>=0);
+  if(avail.length===0) return 0;
+  if(isMax){
+    let best=-Infinity;
+    for(const c of avail){
+      const r=landRow(c); board[r][c]=2;
+      const s=minimaxAB(depth-1,alpha,beta,false,r1,r2);
+      board[r][c]=0;
+      if(s>best) best=s;
+      if(s>alpha) alpha=s;
+      if(beta<=alpha) break;
+    }
+    // CPU rotation branch
+    if(r2>0){
+      const saved=board.map(row=>[...row]);
+      applyRotation();
+      const s=minimaxAB(depth-1,alpha,beta,false,r1,r2-1);
+      board=saved;
+      if(s>best) best=s;
+    }
+    return best;
+  } else {
+    let best=Infinity;
+    for(const c of avail){
+      const r=landRow(c); board[r][c]=1;
+      const s=minimaxAB(depth-1,alpha,beta,true,r1,r2);
+      board[r][c]=0;
+      if(s<best) best=s;
+      if(s<beta) beta=s;
+      if(beta<=alpha) break;
+    }
+    // Player rotation branch
+    if(r1>0){
+      const saved=board.map(row=>[...row]);
+      applyRotation();
+      const s=minimaxAB(depth-1,alpha,beta,true,r1-1,r2);
+      board=saved;
+      if(s<best) best=s;
+    }
+    return best;
+  }
 }
 
 function evalRotate(player){
