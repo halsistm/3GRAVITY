@@ -83,7 +83,7 @@ body{
 .hi{font-size:1.1rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.2));}
 
 /* Drop buttons */
-.drop-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:9px;}
+.drop-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:9px;}
 .drop-btn{
   background:rgba(255,255,255,0.12);border:2px dashed rgba(255,220,100,0.35);
   border-radius:12px;height:38px;
@@ -96,7 +96,7 @@ body{
 .drop-btn:hover .preview{opacity:1;}
 
 /* Board */
-#board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;transform-origin:center center;}
+#board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;transform-origin:center center;}
 #board.spinning{animation:boardSpin .72s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none;}
 @keyframes boardSpin{
   0%{transform:rotate(0deg) scale(1);}
@@ -286,6 +286,7 @@ body{
         <div class="drop-btn dp1" onclick="drop(0)"><span class="preview">🌸</span></div>
         <div class="drop-btn dp1" onclick="drop(1)"><span class="preview">🌸</span></div>
         <div class="drop-btn dp1" onclick="drop(2)"><span class="preview">🌸</span></div>
+        <div class="drop-btn dp1" onclick="drop(3)"><span class="preview">🌸</span></div>
       </div>
       <div id="board"></div>
     </div>
@@ -331,9 +332,9 @@ body{
 
 <script>
 // ── State ──────────────────────────────────────────────
-let board   = [[0,0,0],[0,0,0],[0,0,0]];
+let board   = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
 let cur     = 1;          // 1=player, 2=CPU
-let rot     = {1:1, 2:1};
+let rot     = {1:2, 2:2};
 let turn    = 1;
 let over    = false;
 let busy    = false;
@@ -349,7 +350,7 @@ const MSG_C_HARD   = ['ふふ…(¬‿¬)','もらったよ！(≧∇≦)','詰�
 (function init(){
   const el = document.getElementById('board');
   el.innerHTML = '';
-  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++){
     const d = document.createElement('div');
     d.className = 'cell'; d.id = `cc${r}${c}`;
     el.appendChild(d);
@@ -371,7 +372,7 @@ function setDiff(d){
 // ── Render ─────────────────────────────────────────────
 function render(dr=-1,dc=-1,wins=[]){
   const ws = new Set(wins.map(([r,c])=>`${r}${c}`));
-  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++){
     const el = document.getElementById(`cc${r}${c}`);
     const v  = board[r][c];
     let cl = 'cell';
@@ -424,7 +425,7 @@ function drop(col){
 }
 
 function landRow(col){
-  for(let r=2;r>=0;r--) if(board[r][col]===0) return r;
+  for(let r=3;r>=0;r--) if(board[r][col]===0) return r;
   return -1;
 }
 
@@ -451,13 +452,13 @@ function execRotate(cb){
 }
 
 function applyRotation(){
-  const nb=[[0,0,0],[0,0,0],[0,0,0]];
-  for(let i=0;i<3;i++) for(let j=0;j<3;j++) nb[j][2-i]=board[i][j];
-  for(let c=0;c<3;c++){
+  const nb=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  for(let i=0;i<4;i++) for(let j=0;j<4;j++) nb[j][3-i]=board[i][j];
+  for(let c=0;c<4;c++){
     const st=[];
-    for(let r=0;r<3;r++) if(nb[r][c]) st.push(nb[r][c]);
-    for(let r=0;r<3;r++) nb[r][c]=0;
-    let r=2; for(let i=st.length-1;i>=0;i--) nb[r--][c]=st[i];
+    for(let r=0;r<4;r++) if(nb[r][c]) st.push(nb[r][c]);
+    for(let r=0;r<4;r++) nb[r][c]=0;
+    let r=3; for(let i=st.length-1;i>=0;i--) nb[r--][c]=st[i];
   }
   board=nb;
 }
@@ -504,7 +505,7 @@ function scheduleCPU(){
 }
 
 function cpuPickMove(){
-  const cols = [0,1,2].filter(c=>landRow(c)>=0);
+  const cols = [0,1,2,3].filter(c=>landRow(c)>=0);
   if(cols.length===0) return null;
 
   if(diff==='easy') return cpuEasy(cols);
@@ -592,9 +593,18 @@ function evalRotate(player){
 function scoreBoard(p){
   let s=0;
   const lines=[
-    [[0,0],[0,1],[0,2]],[[1,0],[1,1],[1,2]],[[2,0],[2,1],[2,2]],
-    [[0,0],[1,0],[2,0]],[[0,1],[1,1],[2,1]],[[0,2],[1,2],[2,2]],
-    [[0,0],[1,1],[2,2]],[[0,2],[1,1],[2,0]],
+    [[0,0],[0,1],[0,2]],[[0,1],[0,2],[0,3]],
+    [[1,0],[1,1],[1,2]],[[1,1],[1,2],[1,3]],
+    [[2,0],[2,1],[2,2]],[[2,1],[2,2],[2,3]],
+    [[3,0],[3,1],[3,2]],[[3,1],[3,2],[3,3]],
+    [[0,0],[1,0],[2,0]],[[1,0],[2,0],[3,0]],
+    [[0,1],[1,1],[2,1]],[[1,1],[2,1],[3,1]],
+    [[0,2],[1,2],[2,2]],[[1,2],[2,2],[3,2]],
+    [[0,3],[1,3],[2,3]],[[1,3],[2,3],[3,3]],
+    [[0,0],[1,1],[2,2]],[[1,1],[2,2],[3,3]],
+    [[0,1],[1,2],[2,3]],[[1,0],[2,1],[3,2]],
+    [[0,3],[1,2],[2,1]],[[1,3],[2,2],[3,1]],
+    [[0,2],[1,1],[2,0]],[[1,2],[2,1],[3,0]],
   ];
   const opp = p===1?2:1;
   for(const ln of lines){
@@ -622,10 +632,24 @@ function shuffle(arr){
 
 // ── Win / Draw ─────────────────────────────────────────
 function checkWin(){
+  // 4×4 盤面での3並びライン一覧
   const lines=[
-    [[0,0],[0,1],[0,2]],[[1,0],[1,1],[1,2]],[[2,0],[2,1],[2,2]],
-    [[0,0],[1,0],[2,0]],[[0,1],[1,1],[2,1]],[[0,2],[1,2],[2,2]],
-    [[0,0],[1,1],[2,2]],[[0,2],[1,1],[2,0]],
+    // 横（各行2通り）
+    [[0,0],[0,1],[0,2]],[[0,1],[0,2],[0,3]],
+    [[1,0],[1,1],[1,2]],[[1,1],[1,2],[1,3]],
+    [[2,0],[2,1],[2,2]],[[2,1],[2,2],[2,3]],
+    [[3,0],[3,1],[3,2]],[[3,1],[3,2],[3,3]],
+    // 縦（各列2通り）
+    [[0,0],[1,0],[2,0]],[[1,0],[2,0],[3,0]],
+    [[0,1],[1,1],[2,1]],[[1,1],[2,1],[3,1]],
+    [[0,2],[1,2],[2,2]],[[1,2],[2,2],[3,2]],
+    [[0,3],[1,3],[2,3]],[[1,3],[2,3],[3,3]],
+    // 斜め（右下がり）
+    [[0,0],[1,1],[2,2]],[[1,1],[2,2],[3,3]],
+    [[0,1],[1,2],[2,3]],[[1,0],[2,1],[3,2]],
+    // 斜め（左下がり）
+    [[0,3],[1,2],[2,1]],[[1,3],[2,2],[3,1]],
+    [[0,2],[1,1],[2,0]],[[1,2],[2,1],[3,0]],
   ];
   for(const ln of lines){
     const[a,b,c]=ln;
@@ -649,8 +673,8 @@ function showResult(w){
 
 // ── Reset ──────────────────────────────────────────────
 function reset(){
-  board=[[0,0,0],[0,0,0],[0,0,0]];
-  cur=1; rot={1:1,2:1}; turn=1; over=false; busy=false;
+  board=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  cur=1; rot={1:2,2:2}; turn=1; over=false; busy=false;
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('board').className='';
   document.getElementById('cpuThinking').textContent='';
