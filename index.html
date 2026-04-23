@@ -549,9 +549,9 @@ function cpuNormal(cols){
   const forkDef=findFork(cols,1);
   if(forkDef!==null) return {type:'drop',col:forkDef};
   // 5. Compare rotate vs best drop score — always evaluated, no random gate
-  let bestDrop=-Infinity, bestDropCol=sorted[0]||(cols[0]);
   const order=[1,2,0,3];
   const sorted=[...cols].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  let bestDrop=-Infinity, bestDropCol=sorted[0];
   for(const c of sorted){
     const r=landRow(c); board[r][c]=2;
     const s=scoreBoard(2)-scoreBoard(1)*0.9;
